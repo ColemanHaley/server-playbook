@@ -1,0 +1,37 @@
+version: "3.7"
+
+services:
+  synapse:
+    container_name: synapse
+    image: matrixdotorg/synapse:latest
+    restart: unless-stopped
+    mounts:
+      - type: bind
+        source: "{{ synapse_data_dir }}"
+        target: /data
+    ports:
+      - "8008:8008"
+      - "9100:9100"
+
+  mautrix-facebook:
+    container_name: matutrix-facebook
+    image: dock.mau.dev/mautrix/facebook:latest
+    restart: unless-stopped
+    volumes:
+      - ./mautrix-facebook:/data
+  mautrix-whatsapp:
+    container_name: matutrix-whatsapp
+    image: dock.mau.dev/mautrix/whatsapp:latest
+    restart: unless-stopped
+    volumes:
+      - ./mautrix-whatsapp:/data
+  mautrix-signal:
+    container_name: matutrix-whatsapp
+    image: dock.mau.dev/mautrix/whatsapp:latest
+    restart: unless-stopped
+    volumes:
+      - ./mautrix-signal:/data
+
+networks:
+  matrix:
+    external: true

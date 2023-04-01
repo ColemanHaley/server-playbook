@@ -1,0 +1,334 @@
+---
+- hosts: all
+  vars_files:
+    - vars/synapse.yaml
+    - vars/secrets.enc
+
+  # roles:
+    # - role: geerlingguy.docker
+
+  tasks:
+    - name: update apt list
+      apt:
+        update_cache: true
+      become: true
+
+    - name: Install prerequisites
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg-agent
+          - libseccomp2
+          - python3-distutils
+          - python3-pip
+          - docker-compose-plugin
+          - acl
+          - samba
+      become: true
+
+    - name: Add apt-key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+      become: true
+
+    - name: Add docker repo
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu focal stable
+      become: true
+
+    - name: Install docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+      become: true
+
+    - name: Add user permissions for docker
+      ansible.builtin.user: 
+        name: "{{ user_name }}"
+        groups: docker
+        append: yes
+      become: true
+
+    - name: reset ssh # should be hook
+      meta: "reset_connection"
+
+    - name: Check for docker for ansible
+      ansible.builtin.pip:
+        name: docker
+
+    - name: Check for compose for ansible
+      ansible.builtin.pip:
+        name: compose
+
+    - name: Deploy Portainer
+      community.docker.docker_container:
+        name: portainer
+        image: portainer/portainer-ce
+        ports:
+          - "9443:9443"
+          - "8000:8000"
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+          - portainer_data:/data
+        restart_policy: always
+
+    - name: Deploy Watchtower
+      community.docker.docker_container:
+        name: watchtower
+        image: containrrr/watchtower
+        command: --schedule "0 0 4 * * * --http-api-token  --http-api-metrics"
+        env:
+          WATCHTOWER_HTTP_API_TOKEN: "{{ watchtower_token }}"
+        ports:
+          - "8080:8080"
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+        restart_policy: always
+    - name: copy homepage config
+      ansible.builtin.template:
+        src: config/homepage/services.yaml
+        dest: /data/config/homepage/
+      tags:
+      - homepage
+
+    - name: Deploy homepage
+      community.docker.docker_container:
+        name: homepage
+        image: ghcr.io/benphelps/homepage:latest
+        ports:
+          - 3000:3000
+        volumes:
+          - /data/config/homepage:/app/config # Make sure your local config directory exists
+          - /var/run/docker.sock:/var/run/docker.sock:ro #
+        restart_policy: unless-stopped
+      tags:
+      - homepage
+
+    # - name: Deploy Jellyfin
+    #   community.docker.docker_container:
+    #     name: jellyfin
+    #     image: lscr.io/linuxserver/jellyfin:latest
+    #     env:
+    #       PUID: "1000"
+    #       PGID: "1000"
+    #       TZ: "Europe/London"
+    #     volumes:
+    #       - /jellyfin/config:/config
+    #       - /jellyfin/tv:/data/tvshows
+    #       - /jellyfin/movies:/data/movies
+    #     ports:
+    #       - "8096:8096"
+    #       - "8920:8920"
+    #       - "7539:7539/udp"
+    #       - "1900:1900/udp"
+    #     restart_policy: unless-stopped
+
+    # - name: Deploy Radarr
+    #   community.docker.docker_container:
+    #     name: radarr
+    #     image: cr.hotio.dev/hotio/radarr:latest
+    #     env:
+    #       PUID: "1000"
+    #       PGID: "1000"
+    #       TZ: "Europe/London"
+    #     volumes:
+    #       - /etc/localtime:/etc/localtime:ro
+    #       - /docker/appdata/radarr:/config
+    #       - /data:/data
+    #     ports:
+    #       - "7878:7878"
+    #     restart_policy: unless-stopped
+
+    - name: Ensure Synapse data directory exists
+      ansible.builtin.file:
+        path: "{{ synapse_data_dir }}"
+        state: directory
+        mode: '0755'
+      become: true
+
+    - name: Ensure data directories exist
+      ansible.builtin.file:
+        path: "/data/{{ item }}"
+        state: directory
+        owner: "{{ lookup('env', 'USER') }}"
+        mode: '0775'
+        recurse: true
+      loop:
+        - media/
+        - media/tv
+        - media/movies
+        - torrents/movies
+        - config/
+        - config/homepage
+        - torrents/tv
+      become: true
+      tags: datadir
+
+    # - name: Check if a Synapse signing key exists
+    #   ansible.builtin.stat:
+    #     path: "{{ synapse_data_dir }}/{{ synapse_server_name }}.signing.key"
+    #   register: matrix_synapse_signing_key_stat
+
+
+    # - name: Generate initial Synapse config and signing key
+    #   community.docker.docker_container:
+    #     # cleanup: true
+    #     name: matrix-config
+    #     image: matrixdotorg/synapse:latest
+    #     mounts:
+    #       - type: bind
+    #         source: "{{ synapse_data_dir }}"
+    #         target: /data
+    #     env:
+    #       SYNAPSE_SERVER_NAME: "{{ synapse_server_name }}"
+    #       SYNAPSE_REPORT_STATS: "no"
+    #       SYNAPSE_CONFIG_PATH: /data/homeserver.yaml
+    #     command: ["generate"]
+    #   when: "not matrix_synapse_signing_key_stat.stat.exists" # fix why this keeps running
+
+    # - name: Install PostgreSQL
+    #   apt:
+    #     name:
+    #       - postgresql
+    #       - postgresql-contrib
+    #       - libpq-dev
+    #       - python3-psycopg2
+    #     # update_cache: yes
+    #   become: true
+  
+    # - name: Ensure the PostgreSQL service is running
+    #   service:
+    #     name: postgresql
+    #     state: started
+    #     enabled: true
+    #   become: true
+
+    # - name: Create the database specified in vars
+    #   become: true
+    #   become_user: "postgres"
+    #   postgresql_db:
+    #       name: synapse
+    #       encoding: UTF-8
+    #       lc_collate: C
+    #       lc_ctype: C
+    #       template: template0
+    #       state: present
+
+    # - name: Ensure user has access to the new database
+    #   become: true
+    #   become_user: postgres
+    #   postgresql_user: 
+    #       db: synapse
+    #       user: synapse 
+    #       password: Plethora-Polygon0-Fridge # TODO: hide
+    #       priv: ALL
+    #       state: present
+
+    # - name: Ensure user does not have unnecessary permissions
+    #   become: true
+    #   become_user: postgres
+    #   postgresql_user: 
+    #     name: synapse
+    #     role_attr_flags: NOSUPERUSER,NOCREATEDB
+    #     state: present
+    
+    # - name: Copy the synapse configuration to the docker thingy
+    #   ansible.builtin.template:
+    #     src: templates/homeserver.yaml.j2
+    #     dest: "{{ synapse_data_dir }}/homeserver.yaml"
+    #   become: true
+
+
+    #   #when: "not synapse_running_result.exists"
+
+    #   # ansible.builtin.shell: |
+    #   #   docker run -d \
+    #   #   --name synapse \
+    #   #   --mount type=bind,src={{ synapse_data_dir }},dst=/data \
+    #   #   -p 8008:8008 \
+    #   #   -p 9100:9100 \
+    #   #   --add-host host.docker.internal:host-gateway \
+    #   #   matrixdotorg/synapse:latest
+    # - name: replace line
+    #   lineinfile:
+    #     path: /etc/postgresql/13/main/postgresql.conf
+    #     regexp: "^(.*)listen_addresses(.*)$"
+    #     line: "listen_addresses = '*'"
+    #     backrefs: true
+    #   become: true
+    
+    # - name: add line to pg_hba.conf
+    #   lineinfile:
+    #     path: /etc/postgresql/13/main/pg_hba.conf
+    #     line: "host    all             all             172.17.0.1/24           md5"
+    #   become: true
+    #   register: pg_hba_conf_result
+    
+    # - name: restart postgresql
+    #   service:
+    #     name: postgresql
+    #     state: restarted
+    #   become: true
+    #   when: pg_hba_conf_result.changed
+
+    # - name: make matrix network docker
+    #   community.docker.docker_network:
+    #     name: matrix # TODO: the way of connecting to the host network is not ideal
+    #     driver: bridge
+
+    # # - name: Ensure synapse docker is running
+    # #   community.docker.docker_container:
+    # #     name: synapse
+    # #     image: matrixdotorg/synapse:latest
+    # #     mounts:
+    # #       - type: bind
+    # #         source: "{{ synapse_data_dir }}"
+    # #         target: /data
+    # #     ports:
+    # #       - "8008:8008"
+    # #       - "9100:9100"
+    # #     network: matrix
+
+    - name: copy media docker-compose
+      ansible.builtin.copy:
+        src: 'media/'
+        dest: "media-stack/"
+
+    - name: run media stack
+      community.docker.docker_compose:
+        project_src: media-stack
+  
+      # - name: Register admin user for synapse
+      #   community.docker.docker_container_exec: # TODO: this doesnt work
+      #     container: synapse
+      #     command: | # TODO: hide admin password and make robust
+      #       register_new_matrix_user \
+      #       -u "admin" \
+      #       -p "test" \
+      #       -c /data/homeserver.yaml \ 
+      #       --admin \
+      #       http://localhost:8008
+      #   register: matrix_register_user_result
+      #   changed_when: matrix_register_user_result.rc == 0
+
+    # - name:
+      # community.docker.docker_container:
+      #   name: synapse
+      #   image: "matrixdotorg/synapse:latest"
+
+      #   mounts:
+      #     - type: bind
+      #       source: "{{ synapse_data_dir}}"
+      #       target: /data
+      #   ports:
+      #     - "8008:8008"
+      #     - "9100:9100"
+      #   restart_policy: unless-stopped
+        
+
+
+

@@ -1,0 +1,5 @@
+synapse_server_name: coleman-pi
+user_name: "{{ lookup('env', 'USER') }}"
+matrix_dir: "/home/{{ lookup('env', 'USER') }}/matrix"
+synapse_data_dir: "/home/{{ lookup('env', 'USER') }}/matrix/synapse/synapse-data"
+server_ip: "192.168.10.120"

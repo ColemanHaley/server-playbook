@@ -1,0 +1,61 @@
+---
+# For configuration options and examples, please see:
+# https://gethomepage.dev/en/configs/services
+
+- "*arr":
+        - Sonarr:
+                icon: sonarr.png
+                href: http://{{ server_ip }}:8989/
+                description: Series management
+                widget:
+                      type: sonarr
+                      url: http://{{ server_ip }}:8989/
+                      key: "{{ sonarr_apikey }}"
+        - Radarr:
+                icon: radarr.png
+                href: http://{{ server_ip }}:7878/
+                description: Movie management
+                widget:
+                      type: radarr
+                      url: http://{{ server_ip }}:7878
+                      key: "{{ radarr_apikey }}"
+        - Prowlarr:
+                icon: prowlarr.png
+                href: http://{{ server_ip }}:9696/
+                description: Crawler management
+                widget:
+                      type: prowlarr
+                      url: http://{{ server_ip }}:9696
+                      key: "{{ prowlarr_apikey }}"
+        - QBittorrent:
+                icon: qbittorrent.png
+                href: http://{{server_ip}}:8085/
+                description: ";)"
+
+- "Containers":
+        - Portainer:
+                icon: portainer.png
+                href: https://{{server_ip}}:9443/
+                description: Container management
+                #     widget:
+                #           type: portainer
+                #           url: https://{{server_ip}}:9443
+                #           env: 1
+                #           key: "{{ portainer_accesskey }}"
+        - Watchtower:
+                icon: watchtower.png
+                href: http://{{server_ip}}:8080/
+                description: Update containers
+                #     widget:
+                #           type: watchtower
+                #           url: http://{{server_ip}}:8080
+                #           key: "{{ watchtower_token }}"
+- "Network":
+        - PiHole:
+                icon: pihole.png
+                href: http://{{server_ip}}/admin/
+                description: Block ads
+        - Gluetun:
+                icon: gluetun.png
+                href: "https://{{server_ip}}:9443/#!/2/docker/containers/d3e6d97b40594e76c85979817af19cfea71afb0a7724aadd80c3a20b9d58a5d1"
+                description: Route traffic
